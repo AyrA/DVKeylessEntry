@@ -81,20 +81,23 @@ namespace DVKeylessEntry
                     WarnMessage($"Car lacks loco. Error: {ex.Message}");
                     return;
                 }
-                //Keyless entry only for the diesel locos
-                if (loco is LocoControllerDiesel || loco is LocoControllerShunter)
+                if (Main.settings.KeylessEntryAutostart)
                 {
-                    var l1 = loco as LocoControllerDiesel;
-                    var l2 = loco as LocoControllerShunter;
-                    if (l1 != null)
+                    //Keyless entry only for the diesel locos
+                    if (loco is LocoControllerDiesel || loco is LocoControllerShunter)
                     {
-                        l1.SetEngineRunning(true);
+                        var l1 = loco as LocoControllerDiesel;
+                        var l2 = loco as LocoControllerShunter;
+                        if (l1 != null)
+                        {
+                            l1.SetEngineRunning(true);
+                        }
+                        if (l2 != null)
+                        {
+                            l2.SetEngineRunning(true);
+                        }
+                        LogMessage("Started current loco");
                     }
-                    if (l2 != null)
-                    {
-                        l2.SetEngineRunning(true);
-                    }
-                    LogMessage("Started current loco");
                 }
                 CurrentLoco = loco;
             }
@@ -129,6 +132,11 @@ namespace DVKeylessEntry
         /// <returns>true, if should be shut down</returns>
         private static bool ShouldPerformAutoShutdown(LocoControllerBase Loco)
         {
+            var s = Main.settings.ShutdownOptions;
+            if (s == null)
+            {
+                s = new AutomaticShutdownOptions();
+            }
             //Don't do anything if this object is not present
             if (Loco == null)
             {
@@ -136,27 +144,32 @@ namespace DVKeylessEntry
                 return false;
             }
             //Don't shut down if cars are coupled
-            if (Loco.GetNumberOfCarsInFront() > 0 || Loco.GetNumberOfCarsInRear() > 0)
+            if (s.NoCarsCoupled && (Loco.GetNumberOfCarsInFront() > 0 || Loco.GetNumberOfCarsInRear() > 0))
             {
                 return false;
             }
             //Don't shut down if a coupler is in range
-            if (Loco.IsCouplerInRange(LocoControllerBase.COUPLING_RANGE))
+            if (s.NoCarsInCouplingRange && Loco.IsCouplerInRange(LocoControllerBase.COUPLING_RANGE))
             {
                 return false;
             }
             //Don't shut down if rolling
-            if (Math.Abs(Loco.GetSpeedKmH()) >= 1.0f)
+            if (s.MustBeStationary && Math.Abs(Loco.GetSpeedKmH()) >= 1.0f)
+            {
+                return false;
+            }
+            //Don't shut down if the reverser is not centered
+            if (s.ReverserCentered && Math.Abs(Loco.reverser) >= 0.1f)
             {
                 return false;
             }
             //Don't shut down if independent brake not at least 90% applied
-            if (Loco.independentBrake < 0.9f)
+            if (s.IndependentBrakesApplied && Loco.independentBrake < 0.9f)
             {
                 return false;
             }
             //Don't shut down if remote controlled
-            if (Loco.IsRemoteControlled())
+            if (s.RemoteControlDisconnected && Loco.IsRemoteControlled())
             {
                 return false;
             }
